@@ -1,0 +1,248 @@
+specification {
+  element actor
+  element system
+  element app
+  element store
+  element component
+}
+
+model {
+  actor user 'User / Steuerpflichtiger' {
+    description 'Lädt Rechnungen hoch, prüft Analyseergebnisse und gibt Feedback.'
+  }
+
+  system vercel 'Vercel' {
+    description 'Hosting-Plattform für die TaxPilot AI Frontend-Webseite.'
+
+    app vercelHosting 'Vercel Hosting' {
+      description 'Stellt die statische Web-App bereit und liefert HTML, CSS und JavaScript an den Browser aus.'
+      technology 'Vercel'
+    }
+  }
+
+  system taxpilot 'TaxPilot AI' {
+    description 'Webbasierte KI-Anwendung zur Analyse steuerlich relevanter Rechnungen.'
+
+    app frontend 'Frontend Web App' {
+      description 'Login, Upload, PDF-Extraktion, Dashboard, Historie und Anzeige der Analyseergebnisse.'
+      technology 'HTML / JavaScript / pdf.js'
+
+      component login 'Login' {
+        description 'E-Mail/Passwort-Login und Session Handling.'
+      }
+
+      component dashboard 'Dashboard' {
+        description 'Upload-Zone und Rechnungserfassung.'
+      }
+
+      component pdfExtraction 'pdf.js Extraktion' {
+        description 'Extrahiert Text aus hochgeladenen PDF-Rechnungen.'
+        technology 'pdf.js'
+      }
+
+      component apiClient 'API Client' {
+        description 'Sendet Rechnungsdaten an Make.com und liest/schreibt Daten in Supabase.'
+        technology 'JavaScript Fetch Client'
+      }
+
+      component resultView 'Analyseergebnis' {
+        description 'Zeigt Badge, Kategorie, Confidence und Feedback-Optionen.'
+      }
+
+      component history 'Historie' {
+        description 'Zeigt Rechnungsverlauf, Filter und Jahresübersicht.'
+      }
+    }
+
+    store browserSession 'Browser Session / Client State' {
+      description 'Temporärer Zustand im Browser während Upload und Analyse.'
+    }
+  }
+
+  system make 'Make.com' {
+    description 'Automatisierungsplattform zur Orchestrierung der KI-Analyse und Speicherung.'
+
+    app makeWorkflow 'Make.com Automation Workflow' {
+      description 'Empfängt Rechnungsdaten, ruft OpenAI auf, validiert JSON, speichert Datei und Analyse und sendet das Ergebnis zurück.'
+      technology 'Make.com'
+
+      component webhookTrigger 'Webhook Trigger' {
+        description 'Empfängt JSON vom Frontend.'
+      }
+
+      component aiToolkit 'Make AI Toolkit' {
+        description 'Ruft das KI-Modell mit Prompt und Schema auf.'
+      }
+
+      component jsonParser 'JSON Parser / Validator' {
+        description 'Validiert und normalisiert die strukturierte KI-Antwort.'
+      }
+
+      component supabaseUpload 'Supabase Upload File' {
+        description 'Speichert die Originalrechnung aus fileBase64 im Supabase Storage Bucket.'
+      }
+
+      component createInvoiceRow 'Create Invoice Row' {
+        description 'Speichert Analyseergebnis, Metadaten und Storage-Pfad in der invoices-Tabelle.'
+      }
+
+      component webhookResponse 'Webhook Response' {
+        description 'Sendet die finale JSON-Antwort zurück ans Frontend.'
+      }
+    }
+  }
+
+  system openai 'OpenAI API' {
+    description 'Externe KI-API zur Analyse von Rechnungsdaten.'
+
+    app completionEndpoint 'Completion Endpoint' {
+      description 'Verarbeitet Prompt, Schema und Rechnungsdaten.'
+      technology 'OpenAI API'
+
+      component systemPrompt 'System Prompt Steuerregelwerk DE' {
+        description 'Regeln und Kontext für die steuerliche Vorprüfung.'
+      }
+
+      component jsonSchema 'JSON Schema' {
+        description 'Definiert die erwartete Antwortstruktur.'
+      }
+
+      component jsonOutput 'JSON Output' {
+        description 'Enthält taxRelevant, category, vendor, confidence und weitere Analysefelder.'
+      }
+    }
+  }
+
+  system supabase 'Supabase' {
+    description 'Backend-Plattform für Authentifizierung, persistente Daten und Dateispeicherung.'
+
+    app supabaseAuth 'Supabase Auth' {
+      description 'Authentifizierung, Sessions und Zugriffskontrolle.'
+      technology 'Supabase Auth'
+
+      component rlsPolicies 'RLS Policies' {
+        description 'Schützt Rechnungs- und Feedbackdaten pro User.'
+      }
+    }
+
+    store supabaseStorage 'Supabase Storage' {
+      description 'Speichert hochgeladene Rechnungsdateien im Bucket invoice-files.'
+      technology 'Supabase Storage'
+    }
+
+    store supabasePostgres 'Supabase PostgreSQL' {
+      description 'Speichert Rechnungsanalysen und Nutzerfeedback.'
+      technology 'PostgreSQL'
+
+      component invoicesTable 'Tabelle invoices' {
+        description 'Speichert fileName, vendor, Betrag, Kategorie, Analyseinformationen und Storage-Pfad.'
+      }
+
+      component feedbackTable 'Tabelle feedback' {
+        description 'Speichert Nutzerfeedback zur Analysequalität.'
+      }
+    }
+  }
+
+  user -> vercel 'öffnet Web-App im Browser'
+  vercel -> taxpilot.frontend 'liefert Frontend aus'
+  user -> taxpilot 'nutzt TaxPilot AI'
+  taxpilot -> make 'sendet extrahierte Rechnungsdaten als JSON'
+  make -> openai 'sendet Prompt und JSON Schema'
+  openai -> make 'liefert strukturierte Analyse'
+  make -> supabase 'speichert Datei und Analyseergebnis'
+  taxpilot -> supabase 'authentifiziert User und liest Rechnungen / Feedback'
+
+  user -> taxpilot.frontend 'nutzt'
+  taxpilot.frontend -> taxpilot.browserSession 'speichert temporären Client State'
+  taxpilot.frontend -> make.makeWorkflow 'POST Analyse-Request als JSON'
+  make.makeWorkflow -> openai.completionEndpoint 'ruft KI-Analyse auf'
+  openai.completionEndpoint -> make.makeWorkflow 'gibt Analyse-JSON zurück'
+  make.makeWorkflow -> supabase.supabaseStorage 'speichert Originalrechnung'
+  make.makeWorkflow -> supabase.supabasePostgres 'speichert Analyse und Metadaten'
+  make.makeWorkflow -> taxpilot.frontend 'sendet Analyseergebnis zurück'
+  taxpilot.frontend -> supabase.supabaseAuth 'Login und Session Handling'
+  taxpilot.frontend -> supabase.supabasePostgres 'liest Rechnungen und Feedback'
+
+  taxpilot.frontend.login -> supabase.supabaseAuth 'authentifiziert User'
+  taxpilot.frontend.dashboard -> taxpilot.frontend.pdfExtraction 'extrahiert Text aus PDFs'
+  taxpilot.frontend.pdfExtraction -> taxpilot.frontend.apiClient 'übergibt extrahierten Rechnungstext'
+  taxpilot.frontend.apiClient -> make.makeWorkflow.webhookTrigger 'sendet Rechnungsdaten als JSON'
+  taxpilot.frontend.apiClient -> supabase.supabasePostgres.invoicesTable 'liest gespeicherte Rechnungen'
+  taxpilot.frontend.apiClient -> supabase.supabasePostgres.feedbackTable 'speichert Nutzerfeedback'
+  taxpilot.frontend.history -> supabase.supabasePostgres.invoicesTable 'lädt Rechnungsverlauf und Jahresübersicht'
+  taxpilot.frontend.apiClient -> taxpilot.frontend.resultView 'übergibt Analyseergebnis zur Anzeige'
+
+  make.makeWorkflow.webhookTrigger -> make.makeWorkflow.aiToolkit 'übergibt invoiceText und fileName'
+  make.makeWorkflow.aiToolkit -> openai.completionEndpoint 'sendet Prompt und Schema'
+  make.makeWorkflow.aiToolkit -> make.makeWorkflow.jsonParser 'übergibt KI-Antwort'
+  make.makeWorkflow.webhookTrigger -> make.makeWorkflow.supabaseUpload 'übergibt fileBase64, fileName und mimeType'
+  make.makeWorkflow.supabaseUpload -> supabase.supabaseStorage 'lädt Datei hoch'
+  make.makeWorkflow.jsonParser -> make.makeWorkflow.createInvoiceRow 'übergibt normalisierte Analyse'
+  make.makeWorkflow.supabaseUpload -> make.makeWorkflow.createInvoiceRow 'übergibt Storage-Pfad'
+  make.makeWorkflow.createInvoiceRow -> supabase.supabasePostgres.invoicesTable 'speichert Rechnungseintrag'
+  make.makeWorkflow.createInvoiceRow -> make.makeWorkflow.webhookResponse 'übergibt invoiceId und Analyse'
+  make.makeWorkflow.webhookResponse -> taxpilot.frontend.apiClient 'sendet JSON-Antwort zurück'
+
+  supabase.supabaseAuth.rlsPolicies -> supabase.supabasePostgres.invoicesTable 'schützt Rechnungsdaten'
+  supabase.supabaseAuth.rlsPolicies -> supabase.supabasePostgres.feedbackTable 'schützt Feedbackdaten'
+}
+
+views {
+  view context {
+    title 'TaxPilot AI - System Context'
+    include user
+    include vercel
+    include taxpilot
+    include make
+    include openai
+    include supabase
+    include * -> *
+  }
+
+  view containers {
+    title 'TaxPilot AI - Container View'
+    include user
+    include vercel.vercelHosting
+    include taxpilot.frontend
+    include taxpilot.browserSession
+    include make.makeWorkflow
+    include openai.completionEndpoint
+    include supabase.supabaseAuth
+    include supabase.supabaseStorage
+    include supabase.supabasePostgres
+    include * -> *
+  }
+
+  view frontendComponents {
+    title 'TaxPilot AI - Frontend Components'
+    include vercel.vercelHosting
+    include taxpilot.frontend.*
+    include make.makeWorkflow.webhookTrigger
+    include supabase.supabaseAuth
+    include supabase.supabasePostgres.invoicesTable
+    include supabase.supabasePostgres.feedbackTable
+    include * -> *
+  }
+
+  view makeFlow {
+    title 'TaxPilot AI - Make.com AI Flow'
+    include taxpilot.frontend.apiClient
+    include make.makeWorkflow.*
+    include openai.completionEndpoint
+    include supabase.supabaseStorage
+    include supabase.supabasePostgres.invoicesTable
+    include * -> *
+  }
+
+  view dataSecurity {
+    title 'TaxPilot AI - Data and Security'
+    include taxpilot.frontend
+    include supabase.supabaseAuth
+    include supabase.supabaseAuth.rlsPolicies
+    include supabase.supabaseStorage
+    include supabase.supabasePostgres
+    include supabase.supabasePostgres.*
+    include * -> *
+  }
+}
