@@ -1,20 +1,29 @@
 # TaxPilot AI Frontend
 
-Statischer Demo-MVP für die TaxPilot-AI-Rechnungsanalyse.
+Demo-MVP zur KI-gestützten Vorprüfung von Rechnungen für Freelancer und Selbstständige in Deutschland.
 
-Die Anwendung wird über **Vercel** gehostet und ist hier erreichbar:
-
+Live-Demo:  
 https://tax-pilot-ai-kappa.vercel.app/
 
-## Start
+## Was macht TaxPilot AI?
 
-Die Anwendung muss nicht lokal gehostet werden. Für die Nutzung der aktuellen Demo reicht der Aufruf der Vercel-URL:
+TaxPilot AI analysiert hochgeladene Rechnungen und gibt eine erste Einschätzung zurück:
 
-https://tax-pilot-ai-kappa.vercel.app/
+- steuerlich relevant: `Ja`, `Nein` oder `Manuell prüfen`
+- erkannte Kategorie, z. B. Software, Hardware, Weiterbildung oder Sonstiges
+- Anbieter, Rechnungsdatum und Beträge
+- Confidence-Wert
+- kurze Begründung und Empfehlung
 
-Optional kann die Anwendung lokal getestet werden, da sie aus einer statischen `index.html` besteht.
+Hinweis: TaxPilot AI ist keine Steuerberatung, sondern nur eine automatische Vorprüfung.
 
-Lokaler Projektpfad:
+## Wie funktioniert es?
 
 ```text
-C:\Users\Nori_\Projekte\taxpilot-ai-frontend\index.html
+Vercel Frontend
+→ PDF-Upload im Browser
+→ Textextraktion mit pdf.js
+→ Make.com Webhook
+→ KI-Analyse mit Make AI Toolkit / OpenAI
+→ Supabase Storage + Datenbank
+→ Ergebnis zurück ans Frontend
